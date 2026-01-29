@@ -24,3 +24,4 @@ Caddyfile
 # Node modules (if any)
 node_modules/
 start-gateway.sh
+package-lock.json
