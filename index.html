@@ -306,6 +306,31 @@
       50% { transform: scale(1.15); opacity: 0.85; box-shadow: 0 0 8px 2px rgba(210, 153, 34, 0.3); }
     }
     
+    /* Typewriter animation for auto-generated titles */
+    @keyframes typewriter-cursor {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    .title-generating {
+      color: var(--text-dim);
+      font-style: italic;
+    }
+    .title-generating::after {
+      content: '▋';
+      animation: typewriter-cursor 0.8s infinite;
+      margin-left: 2px;
+    }
+    .title-typewriter {
+      display: inline-block;
+      overflow: hidden;
+      white-space: nowrap;
+      animation: typewriter 0.5s steps(20) forwards;
+    }
+    @keyframes typewriter {
+      from { max-width: 0; }
+      to { max-width: 200px; }
+    }
+    
     .agent-status::after {
       content: attr(data-tooltip);
       position: absolute;
@@ -1759,6 +1784,10 @@
       // Search
       searchQuery: '',
       
+      // Auto-title generation tracking
+      generatingTitles: new Set(),  // Currently generating
+      attemptedTitles: new Set(),   // Already tried (avoid retries)
+      
       // Auto-archive: 'never' or number of days
       autoArchiveDays: localStorage.getItem('sharp_auto_archive_days') || '7'
     };
@@ -1956,6 +1985,92 @@
       } else if (!key) {
         localStorage.removeItem('sharp_openai_key');
         showToast('API key removed', 'info');
+      }
+    }
+    
+    async function autoGenerateTitle(key) {
+      // Skip if no API key
+      const apiKey = localStorage.getItem('sharp_openai_key') || window.SHARP_CONFIG?.openaiKey;
+      if (!apiKey) return;
+      
+      // Mark as attempted to avoid retries
+      state.attemptedTitles.add(key);
+      state.generatingTitles.add(key);
+      renderSessions();
+      
+      try {
+        const session = state.sessions.find(s => s.key === key);
+        if (!session) return;
+        
+        // Get messages
+        const historyResult = await rpcCall('chat.history', { sessionKey: key, limit: 5 });
+        const messages = historyResult?.messages || [];
+        
+        if (messages.length === 0) {
+          state.generatingTitles.delete(key);
+          renderSessions();
+          return;
+        }
+        
+        // Extract conversation
+        const conversation = messages.slice(0, 4).map(m => {
+          const role = m.role === 'user' ? 'User' : 'Assistant';
+          let content = '';
+          if (typeof m.content === 'string') {
+            content = m.content.slice(0, 150);
+          } else if (Array.isArray(m.content)) {
+            content = m.content
+              .filter(c => c.type === 'text')
+              .map(c => c.text)
+              .join(' ')
+              .slice(0, 150);
+          }
+          return `${role}: ${content}`;
+        }).join('\n');
+        
+        if (!conversation.trim()) {
+          state.generatingTitles.delete(key);
+          renderSessions();
+          return;
+        }
+        
+        // Generate title
+        const title = await generateTitleWithLLM(conversation);
+        
+        state.generatingTitles.delete(key);
+        
+        if (title) {
+          // Animate the title with typewriter effect
+          setCustomSessionName(key, title);
+          animateTitle(key, title);
+        } else {
+          renderSessions();
+        }
+      } catch (err) {
+        console.error('Auto-generate title failed:', err);
+        state.generatingTitles.delete(key);
+        renderSessions();
+      }
+    }
+    
+    function animateTitle(key, title) {
+      // Find the session name element and animate it
+      const el = document.querySelector(`[data-session-key="${key}"] .item-name`);
+      if (el) {
+        el.innerHTML = '';
+        el.className = 'item-name title-typewriter';
+        let i = 0;
+        const interval = setInterval(() => {
+          if (i < title.length) {
+            el.textContent += title[i];
+            i++;
+          } else {
+            clearInterval(interval);
+            el.className = 'item-name';
+          }
+        }, 30);
+      } else {
+        renderSessions();
       }
     }
     
@@ -2673,12 +2788,15 @@
           ? `toggleSessionSelection('${escapeHtml(s.key)}')`
           : `openSession('${escapeHtml(s.key)}')`;
         
+        const isGenerating = state.generatingTitles.has(s.key);
+        const sessionName = getSessionName(s, true);  // true = trigger auto-generation
+        
         return `
-          <div class="item ${isActive ? 'active' : ''} ${isArchived ? 'archived-session' : ''}" onclick="${clickHandler}">
+          <div class="item ${isActive ? 'active' : ''} ${isArchived ? 'archived-session' : ''}" data-session-key="${escapeHtml(s.key)}" onclick="${clickHandler}">
             <div class="session-checkbox ${isSelected ? 'checked' : ''}" data-key="${escapeHtml(s.key)}" onclick="toggleSessionSelection('${escapeHtml(s.key)}', event)"></div>
             <div class="item-icon">${getSessionIcon(s)}</div>
             <div class="item-content">
-              <div class="item-name">${escapeHtml(getSessionName(s))}</div>
+              <div class="item-name ${isGenerating ? 'title-generating' : ''}">${escapeHtml(sessionName)}</div>
               <div class="item-meta">${escapeHtml(getSessionMeta(s))}</div>
             </div>
             <div class="session-actions">
@@ -2722,10 +2840,28 @@
       return '💬';
     }
     
-    function getSessionName(s) {
+    function getSessionName(s, triggerAutoGen = false) {
       // Check for custom name first
       const customName = getCustomSessionName(s.key);
       if (customName) return customName;
+      
+      // Check if currently generating
+      if (state.generatingTitles.has(s.key)) {
+        return '✨ Generating';
+      }
+      
+      // Auto-trigger title generation for sessions with messages
+      if (triggerAutoGen && !state.attemptedTitles.has(s.key)) {
+        // Only auto-generate for sessions that have messages and aren't special
+        const isSpecial = s.key === 'agent:main:main' || 
+                         s.key.includes(':subagent:') || 
+                         s.key.includes(':app:') ||
+                         s.key.startsWith('cron:');
+        if (!isSpecial && s.totalTokens > 0) {
+          autoGenerateTitle(s.key);
+        }
+      }
+      
       return getDefaultSessionName(s);
     }
     
