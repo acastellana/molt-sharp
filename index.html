@@ -2072,7 +2072,8 @@
     function escapeHtml(text) {
       const div = document.createElement('div');
       div.textContent = text;
-      return div.innerHTML;
+      // Also escape single quotes for use in single-quoted attributes (onclick handlers)
+      return div.innerHTML.replace(/'/g, '&#39;');
     }
     
     function handleChatKey(e) {

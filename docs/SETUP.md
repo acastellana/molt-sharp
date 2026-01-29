@@ -18,7 +18,7 @@ git clone https://github.com/acastellana/sharp.git
 cd sharp
 
 # Serve with Python
-python -m http.server 9000
+python3 -m http.server 9000
 
 # Or with Node.js
 npx serve -p 9000

@@ -23,7 +23,7 @@ Sharp is a static HTML/JS application that connects to a compatible WebSocket ba
 1. **Serve the files** with any static file server:
    ```bash
    # Using Python
-   python -m http.server 9000
+   python3 -m http.server 9000
    
    # Using Node.js
    npx serve -p 9000
