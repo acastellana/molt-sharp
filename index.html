@@ -1932,13 +1932,8 @@
       const apiKey = localStorage.getItem('sharp_openai_key') || window.SHARP_CONFIG?.openaiKey;
       
       if (!apiKey) {
-        // Fallback: extract first few words
-        const firstLine = conversation.split('\n')[0] || '';
-        const content = firstLine.replace(/^(User|Assistant):\s*/i, '');
-        const words = content.split(/\s+/).filter(w => w.length > 0);
-        let title = words.slice(0, 5).join(' ');
-        if (words.length > 5) title += '...';
-        return title.slice(0, 40);
+        // No API key = no title generation (use default names)
+        return null;
       }
       
       try {
@@ -1997,9 +1992,12 @@
     }
     
     async function autoGenerateTitle(key) {
-      // Skip if no API key
+      // Skip if no API key - don't save fallback titles
       const apiKey = localStorage.getItem('sharp_openai_key') || window.SHARP_CONFIG?.openaiKey;
-      if (!apiKey) return;
+      if (!apiKey) {
+        state.attemptedTitles.add(key);  // Mark as attempted to avoid retries
+        return;
+      }
       
       // Mark as attempted to avoid retries
       state.attemptedTitles.add(key);
