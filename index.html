@@ -1559,7 +1559,6 @@
           </label>
           <button class="section-action" id="selectModeBtn" onclick="enterMultiSelect()" title="Select sessions">☑</button>
           <button class="section-action" onclick="refresh()" title="Refresh">↻</button>
-          <button class="section-action" onclick="setOpenAIKey()" title="Set OpenAI API key for title generation">🔑</button>
         </div>
         <!-- Search Box -->
         <div class="session-search">
@@ -1928,20 +1927,12 @@
     }
     
     async function generateTitleWithLLM(conversation) {
-      // Get OpenAI API key from localStorage or config
-      const apiKey = localStorage.getItem('sharp_openai_key') || window.SHARP_CONFIG?.openaiKey;
-      
-      if (!apiKey) {
-        // No API key = no title generation (use default names)
-        return null;
-      }
-      
       try {
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        // Use server-side proxy that injects the API key
+        const response = await fetch('/api/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify({
             model: 'gpt-5-nano',
@@ -1978,27 +1969,9 @@
       }
     }
     
-    function setOpenAIKey() {
-      const current = localStorage.getItem('sharp_openai_key') || '';
-      const key = prompt('Enter OpenAI API key for title generation (leave empty to use fallback):', current ? '••••••••' : '');
-      if (key === null) return;
-      if (key && key !== '••••••••') {
-        localStorage.setItem('sharp_openai_key', key);
-        showToast('API key saved', 'success');
-      } else if (!key) {
-        localStorage.removeItem('sharp_openai_key');
-        showToast('API key removed', 'info');
-      }
-    }
+    // OpenAI API key is injected server-side via /api/openai proxy
     
     async function autoGenerateTitle(key) {
-      // Skip if no API key - don't save fallback titles
-      const apiKey = localStorage.getItem('sharp_openai_key') || window.SHARP_CONFIG?.openaiKey;
-      if (!apiKey) {
-        state.attemptedTitles.add(key);  // Mark as attempted to avoid retries
-        return;
-      }
-      
       // Mark as attempted to avoid retries
       state.attemptedTitles.add(key);
       state.generatingTitles.add(key);
