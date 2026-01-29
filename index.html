@@ -149,6 +149,64 @@
     .show-archived-toggle:hover { background: var(--bg-hover); color: var(--text); }
     .show-archived-toggle input { margin: 0; cursor: pointer; }
     
+    /* Auto-archive settings dropdown */
+    .auto-archive-setting {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+    .auto-archive-setting select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-size: 0.7rem;
+      padding: 2px 4px;
+      cursor: pointer;
+    }
+    .auto-archive-setting select:focus { outline: none; border-color: var(--accent); }
+    
+    /* Toast notifications */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .toast {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      color: var(--text);
+      font-size: 0.9rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      animation: slideIn 0.3s ease;
+      max-width: 320px;
+    }
+    .toast.success { border-left: 3px solid var(--green); }
+    .toast.info { border-left: 3px solid var(--accent); }
+    .toast.warning { border-left: 3px solid var(--yellow); }
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes slideOut {
+      from { transform: translateX(0); opacity: 1; }
+      to { transform: translateX(100%); opacity: 0; }
+    }
+    .toast.hiding { animation: slideOut 0.3s ease forwards; }
+    
     .item {
       display: flex;
       align-items: center;
@@ -1310,6 +1368,9 @@
   </style>
 </head>
 <body>
+  <!-- Toast container for notifications -->
+  <div class="toast-container" id="toastContainer"></div>
+  
   <!-- ═══════════════════════════════════════════════════════════════
        LOGIN MODAL
        ═══════════════════════════════════════════════════════════════ -->
@@ -1356,6 +1417,16 @@
       <div class="section">
         <div class="section-header">
           <span class="section-title">Sessions</span>
+          <div class="auto-archive-setting" title="Auto-archive inactive sessions">
+            <span>⏰</span>
+            <select id="autoArchiveSelect" onchange="setAutoArchiveDays(this.value)">
+              <option value="3">3d</option>
+              <option value="7">7d</option>
+              <option value="14">14d</option>
+              <option value="30">30d</option>
+              <option value="never">Off</option>
+            </select>
+          </div>
           <label class="show-archived-toggle" id="showArchivedToggle" style="display: none;">
             <input type="checkbox" onchange="toggleShowArchived()">
             📦
@@ -1570,7 +1641,10 @@
       // Pin & Archive
       pinnedSessions: JSON.parse(localStorage.getItem('sharp_pinned_sessions') || '[]'),
       archivedSessions: JSON.parse(localStorage.getItem('sharp_archived_sessions') || '[]'),
-      showArchived: false
+      showArchived: false,
+      
+      // Auto-archive: 'never' or number of days
+      autoArchiveDays: localStorage.getItem('sharp_auto_archive_days') || '7'
     };
     
     // ═══════════════════════════════════════════════════════════════
@@ -1617,6 +1691,83 @@
     function toggleShowArchived() {
       state.showArchived = !state.showArchived;
       renderSessions();
+    }
+    
+    // ═══════════════════════════════════════════════════════════════
+    // AUTO-ARCHIVE
+    // ═══════════════════════════════════════════════════════════════
+    function setAutoArchiveDays(value) {
+      state.autoArchiveDays = value;
+      localStorage.setItem('sharp_auto_archive_days', value);
+      console.log('[Sharp] Auto-archive set to:', value);
+    }
+    
+    function initAutoArchiveUI() {
+      const select = document.getElementById('autoArchiveSelect');
+      if (select) {
+        select.value = state.autoArchiveDays;
+      }
+    }
+    
+    function checkAutoArchive() {
+      // Skip if auto-archive is disabled
+      if (state.autoArchiveDays === 'never') {
+        console.log('[Sharp] Auto-archive disabled');
+        return;
+      }
+      
+      const days = parseInt(state.autoArchiveDays, 10);
+      if (isNaN(days) || days <= 0) return;
+      
+      const threshold = Date.now() - (days * 24 * 60 * 60 * 1000);
+      let autoArchivedCount = 0;
+      
+      for (const session of state.sessions) {
+        // Skip if already archived
+        if (isSessionArchived(session.key)) continue;
+        
+        // Skip pinned sessions (they're important)
+        if (isSessionPinned(session.key)) continue;
+        
+        // Check if session is inactive beyond threshold
+        const updatedAt = session.updatedAt || 0;
+        if (updatedAt > 0 && updatedAt < threshold) {
+          // Auto-archive this session
+          state.archivedSessions.push(session.key);
+          autoArchivedCount++;
+          console.log('[Sharp] Auto-archived:', session.key, 'last updated:', new Date(updatedAt).toISOString());
+        }
+      }
+      
+      // Save if any were archived
+      if (autoArchivedCount > 0) {
+        localStorage.setItem('sharp_archived_sessions', JSON.stringify(state.archivedSessions));
+        showToast(`Auto-archived ${autoArchivedCount} inactive session${autoArchivedCount > 1 ? 's' : ''}`, 'info');
+        renderSessions();
+        renderSessionsGrid();
+      }
+    }
+    
+    // ═══════════════════════════════════════════════════════════════
+    // TOAST NOTIFICATIONS
+    // ═══════════════════════════════════════════════════════════════
+    function showToast(message, type = 'info', durationMs = 4000) {
+      const container = document.getElementById('toastContainer');
+      if (!container) return;
+      
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      
+      const icon = type === 'success' ? '✓' : type === 'warning' ? '⚠' : 'ℹ';
+      toast.innerHTML = `<span>${icon}</span><span>${escapeHtml(message)}</span>`;
+      
+      container.appendChild(toast);
+      
+      // Auto-remove after duration
+      setTimeout(() => {
+        toast.classList.add('hiding');
+        setTimeout(() => toast.remove(), 300);
+      }, durationMs);
     }
     
     // ═══════════════════════════════════════════════════════════════
@@ -2035,6 +2186,8 @@
               state.sessionStatus[s.key] = state.activeRuns.has(s.key) ? 'thinking' : 'idle';
             }
           }
+          // Check for auto-archiving before rendering
+          checkAutoArchive();
           renderSessions();
           renderSessionsGrid();
         }
@@ -2992,6 +3145,9 @@
     // INIT
     // ═══════════════════════════════════════════════════════════════
     function init() {
+      // Initialize auto-archive dropdown UI
+      initAutoArchiveUI();
+      
       connectWebSocket();
       
       // Auto-refresh sessions every 30s
