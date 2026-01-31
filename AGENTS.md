@@ -4,136 +4,92 @@
 
 Sharp is the **unified control panel** for the Clawdbot ecosystem:
 - Agent session management (chat, monitor, control)
+- Real-time WebSocket connection to gateway
 - App embedding with assistant panels
-- Knowledge base (via next-app)
 
 ## Architecture
 
 ```
 sharp/
-├── index.html           # Main dashboard (vanilla JS)
+├── index.html           # Main dashboard (vanilla JS, all-in-one)
 ├── app.html             # App viewer with assistant panel
+├── styles/main.css      # Extracted CSS (referenced by index.html)
+├── lib/config.js        # Configuration loader
 ├── .registry/
-│   └── apps.json        # App registry (defines embedded apps)
-├── apps/                # Self-contained apps
-│   └── prediction-market/
-├── next-app/            # Next.js migration (sessions, KB, etc.)
-├── js/                  # Modular JS (partial extraction)
-├── lib/                 # Shared libraries
-├── styles/              # CSS
-└── docs/                # Documentation
+│   └── apps.json        # App registry (user-specific, gitignored)
+├── docs/                # Documentation
+├── specs/               # Feature specifications
+└── tests/               # Unit tests (vitest)
 ```
 
-## How to Run Sharp
+## How to Run
 
-### Quick Start (Development)
+### Quick Start
 ```bash
 cd ~/clawd/projects/sharp
 
-# Serve the main dashboard
+# Option 1: Python
 python3 -m http.server 9000
-# Or: npx serve -p 9000
+
+# Option 2: Node
+npx serve -p 9000
 
 # Open: http://localhost:9000
 ```
 
-### With Apps (Full Setup)
-```bash
-# Terminal 1: Main dashboard
-cd ~/clawd/projects/sharp
-python3 -m http.server 9000
+### Production
+Use Caddy (see `Caddyfile.example`):
+- WebSocket proxy to gateway
+- App routes
+- HTTPS via Tailscale
 
-# Terminal 2: Next.js app (KB, sessions)
-cd ~/clawd/projects/sharp/next-app
-pnpm dev --port 3001
-```
+## Configuration
 
-Access:
-- **Main dashboard:** http://localhost:9000
-- **Knowledge Base:** http://localhost:3001/kb
-- **KB via app viewer:** http://localhost:9000/app.html?id=kb
-
-## Apps System
-
-### How Apps Work
-1. Apps are registered in `.registry/apps.json`
-2. Each app runs as a separate service (own port)
-3. `app.html` embeds apps in an iframe with an assistant panel
-4. Caddy/nginx proxies app routes in production
-
-### App Registry (`.registry/apps.json`)
+Copy `config.example.json` to `config.json`:
 ```json
 {
-  "apps": [
-    {
-      "id": "kb",
-      "name": "Knowledge Base",
-      "port": 3001,
-      "path": "next-app",
-      "startCommand": "pnpm dev --port 3001",
-      "icon": "📚"
-    }
-  ]
+  "gatewayWsUrl": "wss://your-host/ws",
+  "gatewayHttpUrl": "https://your-host"
 }
 ```
 
-### Adding a New App
-1. Create app in `apps/` directory (or use existing service)
-2. Add entry to `.registry/apps.json`
-3. Add proxy rule in Caddyfile (for production)
-4. Access via: `http://localhost:9000/app.html?id=your-app-id`
+## Key Features
 
-### Current Apps
-| ID | Name | Port | Path |
-|----|------|------|------|
-| `kb` | Knowledge Base | 3001 | `next-app` |
-| `prediction-market` | Prediction Market | 8765 | `apps/prediction-market` |
-
-## Key Files
-
-| File | Purpose |
-|------|---------|
-| `index.html` | Main dashboard (3000+ lines, monolithic) |
-| `app.html` | App viewer with embedded assistant |
-| `.registry/apps.json` | App registry |
-| `next-app/` | Next.js migration target |
-| `MIGRATION-NOTES.md` | Detailed migration documentation |
-
-## Migration Status
-
-Sharp is being migrated from vanilla JS to Next.js:
-- **Current:** `index.html` (working, monolithic)
-- **Target:** `next-app/` (in progress)
-
-The `next-app` already has:
-- [x] Sessions page (basic)
-- [x] Knowledge Base (`/kb`)
-- [ ] Chat interface
-- [ ] WebSocket integration
-- [ ] Full feature parity
+- **Session list** with search, pin, archive
+- **Channel filters** (Telegram, Discord, Signal, etc.)
+- **Status filters** (Running, Unread, Error, Recent, Idle)
+- **Real-time chat** with streaming responses
+- **Tool activity** indicator
+- **Auto-archive** inactive sessions
+- **AI-generated titles** via OpenAI proxy
+- **Export chat** as Markdown
 
 ## Development
 
-No build step for vanilla JS. Just edit and refresh.
+No build step. Edit `index.html` and refresh.
 
-For next-app:
+### Tests
 ```bash
-cd next-app
-pnpm dev      # Development
-pnpm build    # Production build
-pnpm lint     # Linting
+npm test           # Run tests
+npm run test:watch # Watch mode
 ```
 
-## Production Deployment
+### Code Style
+- Vanilla JS (ES6+)
+- CSS variables for theming
+- Single-file architecture (index.html)
 
-See `docs/SETUP.md` and `Caddyfile.example` for:
-- Reverse proxy configuration
-- WebSocket proxying
-- App embedding
-- Authentication
+## Files
+
+| File | Purpose |
+|------|---------|
+| `index.html` | Main dashboard (~3000 lines) |
+| `app.html` | App viewer with assistant panel |
+| `styles/main.css` | CSS (loaded by index.html) |
+| `lib/config.js` | Config loader script |
+| `serve.js` | Optional Node.js server |
 
 ## Links
 
 - [Backend API](docs/BACKEND-API.md)
 - [Setup Guide](docs/SETUP.md)
-- [Migration Notes](MIGRATION-NOTES.md)

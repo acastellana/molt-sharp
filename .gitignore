@@ -21,11 +21,14 @@ Caddyfile
 *~
 .DS_Store
 
-# Node modules (if any)
+# Node
 node_modules/
-start-gateway.sh
 package-lock.json
 
-# pycache
-**/__pycache__/
+# Build artifacts
+dist/
+.next/
+
+# Python
+__pycache__/
 *.pyc
