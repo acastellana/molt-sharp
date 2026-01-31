@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { Sidebar } from './Sidebar';
 import { DocViewer } from './DocViewer';
 import type { FolderNode } from '@/lib/kb';
@@ -66,9 +67,9 @@ export function KbDocPageClient({
             <span className="text-lg">☰</span>
           </button>
           <nav className="flex items-center gap-2 text-sm text-[var(--text-dim)] flex-1 overflow-x-auto whitespace-nowrap">
-            <a href="/kb" className="hover:text-[var(--accent)] transition-colors">
+            <Link href="/kb" className="hover:text-[var(--accent)] transition-colors">
               Knowledge Base
-            </a>
+            </Link>
             {slugParts.slice(0, -1).map((part, i) => (
               <span key={`${part}-${i}`} className="flex items-center gap-2">
                 <span>/</span>

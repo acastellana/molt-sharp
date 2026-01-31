@@ -165,7 +165,7 @@ export default function SessionChatPage({ params }: SessionPageProps): React.Rea
       try {
         const sent = await sendMessage(trimmed, sessionKey);
         setMessages((prev) => [...prev.filter((message) => message.id !== tempId), sent]);
-      } catch (err) {
+      } catch {
         setMessages((prev) => [
           ...prev.filter((message) => message.id !== tempId),
           createSystemMessage('Failed to send message', sessionKey),

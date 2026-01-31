@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { GatewayClient, getGateway, resetGateway } from '../lib/gateway';
+import { GatewayClient, getGateway } from '../lib/gateway';
 import type {
   ConnectionStatus,
   GatewayOptions,

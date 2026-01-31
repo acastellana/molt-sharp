@@ -17,7 +17,7 @@ type SessionListProps = {
 
 export function SessionList({ 
   onSessionSelect, 
-  selectedSession 
+  selectedSession: _selectedSession 
 }: SessionListProps): React.ReactElement {
   const { isConnected, listSessions, subscribe, gateway } = useGateway();
   const [sessions, setSessions] = useState<Session[]>([]);

@@ -18,8 +18,6 @@ import type {
   Session,
   Message,
   HistoryResponse,
-  ChatEvent,
-  AgentEvent,
 } from './types';
 
 // ═══════════════════════════════════════════════════════════════
@@ -141,7 +139,7 @@ export class GatewayClient {
       try {
         const msg = JSON.parse(event.data as string) as WsMessage;
         this.handleMessage(msg);
-      } catch (err) {
+      } catch {
         this.handleError(new Error('Failed to parse message'));
       }
     };
@@ -432,7 +430,7 @@ export class GatewayClient {
     }
     
     // Reject all pending requests
-    for (const [id, pending] of this.pending) {
+    for (const [, pending] of this.pending) {
       clearTimeout(pending.timeout);
       pending.reject(new Error('WebSocket closed'));
     }
