@@ -10,6 +10,7 @@ import type { Session, SessionKey } from '@/lib/types';
 type SessionCardProps = {
   session: Session;
   isActive?: boolean;
+  isChild?: boolean;
   onClick?: (sessionKey: SessionKey) => void;
   onAbort?: (sessionKey: SessionKey) => void | Promise<void>;
 };
@@ -72,6 +73,7 @@ function truncate(text: string, maxLength: number): string {
 export function SessionCard({
   session,
   isActive = false,
+  isChild = false,
   onClick,
   onAbort,
 }: SessionCardProps): React.ReactElement {
@@ -100,6 +102,7 @@ export function SessionCard({
         transition-all duration-[var(--transition-fast)]
         hover:bg-[var(--bg-hover)]
         ${isActive ? 'bg-[var(--bg-active)] border-l-2 border-l-[var(--accent)]' : ''}
+        ${isChild ? 'py-3 bg-[var(--bg-elevated)]/50' : ''}
       `}
     >
       {/* Header: Agent + Channel + Time */}

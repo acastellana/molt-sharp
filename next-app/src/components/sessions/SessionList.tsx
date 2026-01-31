@@ -97,20 +97,94 @@ export function SessionList({
     };
   }, [isConnected, subscribe, fetchSessions]);
 
+  // Parse session key to get channel type
+  const getSessionChannel = (key: SessionKey): string => {
+    const parts = key.split(':');
+    return parts[2] || 'unknown';
+  };
+
+  // Check if session is a subagent
+  const isSubagent = (key: SessionKey): boolean => {
+    return getSessionChannel(key) === 'subagent';
+  };
+
   // Sort sessions: active first, then by last message time
+  // But keep subagents grouped after their potential parents
   const sortedSessions = [...sessions].sort((a, b) => {
     const aActive = activeRuns.has(a.key);
     const bActive = activeRuns.has(b.key);
+    const aSubagent = isSubagent(a.key);
+    const bSubagent = isSubagent(b.key);
     
-    // Active sessions first
-    if (aActive && !bActive) return -1;
-    if (!aActive && bActive) return 1;
+    // Active sessions first (but subagents stay with parents)
+    if (aActive && !bActive && !aSubagent && !bSubagent) return -1;
+    if (!aActive && bActive && !aSubagent && !bSubagent) return 1;
     
     // Then by last message time
     const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
     const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
     return bTime - aTime;
   });
+
+  // Build tree structure: group subagents under parent sessions
+  type SessionNode = {
+    session: Session;
+    children: Session[];
+  };
+
+  const buildSessionTree = (): SessionNode[] => {
+    const mainSessions: SessionNode[] = [];
+    const subagentSessions: Session[] = [];
+    
+    // Separate main sessions and subagents
+    for (const session of sortedSessions) {
+      if (isSubagent(session.key)) {
+        subagentSessions.push(session);
+      } else {
+        mainSessions.push({ session, children: [] });
+      }
+    }
+    
+    // Try to match subagents to parents by timing
+    // A subagent likely belongs to the most recent active parent session
+    for (const subagent of subagentSessions) {
+      const subagentTime = subagent.createdAt ? new Date(subagent.createdAt).getTime() : 0;
+      
+      // Find the best parent: most recent session that was active before this subagent
+      let bestParent: SessionNode | null = null;
+      let bestTimeDiff = Infinity;
+      
+      for (const node of mainSessions) {
+        const parentTime = node.session.lastMessageAt 
+          ? new Date(node.session.lastMessageAt).getTime() 
+          : new Date(node.session.createdAt).getTime();
+        
+        // Parent should have been active around or before subagent was created
+        const timeDiff = subagentTime - parentTime;
+        if (timeDiff >= -60000 && timeDiff < bestTimeDiff) { // Within 1 minute before
+          bestTimeDiff = timeDiff;
+          bestParent = node;
+        }
+      }
+      
+      if (bestParent) {
+        bestParent.children.push(subagent);
+      } else if (mainSessions.length > 0) {
+        // Fallback: attach to first main session
+        mainSessions[0].children.push(subagent);
+      } else {
+        // No parent found, create a virtual parent
+        mainSessions.push({ 
+          session: subagent, 
+          children: [] 
+        });
+      }
+    }
+    
+    return mainSessions;
+  };
+
+  const sessionTree = buildSessionTree();
 
   // Loading state
   if (!isConnected) {
@@ -179,15 +253,53 @@ export function SessionList({
         </button>
       </div>
 
-      {/* Session cards */}
-      {sortedSessions.map((session) => (
-        <SessionCard
-          key={session.key}
-          session={session}
-          isActive={activeRuns.has(session.key)}
-          onClick={onSessionSelect}
-          onAbort={abort}
-        />
+      {/* Session cards with tree structure */}
+      {sessionTree.map((node) => (
+        <div key={node.session.key}>
+          {/* Parent session */}
+          <SessionCard
+            session={node.session}
+            isActive={activeRuns.has(node.session.key)}
+            onClick={onSessionSelect}
+            onAbort={abort}
+          />
+          
+          {/* Child sessions (subagents) */}
+          {node.children.length > 0 && (
+            <div className="relative">
+              {node.children.map((child, index) => (
+                <div key={child.key} className="relative">
+                  {/* Tree connector */}
+                  <div className="absolute left-4 top-0 bottom-0 flex items-start pointer-events-none">
+                    {/* Vertical line */}
+                    <div 
+                      className={`
+                        w-px bg-[var(--border-subtle)]
+                        ${index === node.children.length - 1 ? 'h-6' : 'h-full'}
+                      `}
+                    />
+                    {/* Horizontal arrow */}
+                    <div className="flex items-center h-6">
+                      <div className="w-3 h-px bg-[var(--border-subtle)]" />
+                      <span className="text-[var(--text-muted)] text-xs ml-0.5">↳</span>
+                    </div>
+                  </div>
+                  
+                  {/* Indented child card */}
+                  <div className="ml-8">
+                    <SessionCard
+                      session={child}
+                      isActive={activeRuns.has(child.key)}
+                      onClick={onSessionSelect}
+                      onAbort={abort}
+                      isChild
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       ))}
     </div>
   );
